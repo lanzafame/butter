@@ -14,6 +14,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	nanoboxConfig "github.com/pagodabox/nanobox-config"
 	"golang.org/x/crypto/ssh"
@@ -159,10 +160,20 @@ func handleChannelRequest(ch ssh.Channel, req *ssh.Request) {
 			go io.Copy(inPipe, ch)
 
 			err = cmd.Wait()
+			exitStatusBuffer := make([]byte, 4)
+			binary.PutUvarint(exitStatusBuffer, 0)
+
 			if err != nil {
 				fmt.Println("got an error", err)
+				// should return the exit code
+				binary.PutUvarint(exitStatusBuffer, 1)
 			}
-			fmt.Println("closing connection")
+
+			fmt.Println("forwarding exit code")
+			_, err = ch.SendRequest("exit-status", false, exitStatusBuffer)
+			if err != nil {
+				fmt.Println("unable to send exit code", err)
+			}
 			ch.Close()
 		case strings.HasPrefix(command, "tunnel"):
 			ch.Write([]byte("establishing tunnel! (NOT YET IMPLEMENTED)\r\n"))
