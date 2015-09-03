@@ -29,15 +29,23 @@ func Deploy(stream io.Writer, deploy string) error {
 
 	stream.Write(templates.Header)
 	// connect up to mist
-	client, err := mist.NewRemoteClient(config.Config["mistAddress"])
+	logClient, err := mist.NewRemoteClient(config.Config["mistAddress"])
 	if err != nil {
 		stream.Write(templates.ApiUnavailable)
 		return templates.ApiUnavailableError
 	}
-	defer client.Close()
-	client.Subscribe([]string{"log", "deploy"})
+	defer logClient.Close()
+	logClient.Subscribe([]string{"log", "deploy"})
 
-	// TODO: connect up to noanobox mist (websocket)
+	// TODO add in authentication
+	header := make(http.Header, 0)
+	transactionClient := mist.NewWebsocketClient("wss://smoke.nanobox.io/subscribe", header)
+
+	// TODO: send deploy to nanobox
+	http.Post("https://nanobox.io/apps/me/deploy/"+deploy, "application/json", nil)
+
+	transactionClient.Subscribe([]string{"deploy", deploy_id})
+
 	go func() {
 		// subscribe to transaction updates? maybe show which transaction is running?
 		transactions := []string{"deploy", "scale", "rename", "scale"}
@@ -67,10 +75,7 @@ func Deploy(stream io.Writer, deploy string) error {
 		close(done)
 	}()
 
-	// TODO: send deploy to nanobox
-	http.Post("https://nanobox.io/apps/me/deploy/"+deploy, "application/json", nil)
-
-	// listen for changes
+	// listen for new deploy logs
 outer:
 	for {
 		select {
