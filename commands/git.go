@@ -14,7 +14,7 @@
 package commands
 
 import (
-	git "github.com/pagodabox/na-ssh/git"
+	"github.com/pagodabox/na-ssh/git"
 	"github.com/pagodabox/na-ssh/nanobox"
 	"github.com/pagodabox/na-ssh/templates"
 	"github.com/pagodabox/nanobox-config"
@@ -33,17 +33,32 @@ func (push Push) Match(command string) bool {
 }
 
 func (push Push) Run(command string, ch ssh.Channel) (uint64, error) {
-	originalCommit := getCommit("master")
+	//TODO make "master" be dynamic
+	originalCommit := getCommit("live.git", "master")
 	code, err := git.Shell(ch, ch.Stderr(), command)
 	if err == nil {
 		stream := ch.Stderr()
-		newCommit := getCommit("master")
+
+		newCommit := getCommit("live.git", "master")
 		if newCommit == originalCommit {
 			stream.Write(templates.NoChanges)
 			return code, nil
 		}
+
 		err := nanobox.Deploy(stream, newCommit)
-		if err != nil {
+
+		switch {
+		case err == templates.ApiUnavailableError:
+
+			// write the original commit back to the master file, so that we
+			// can trigger a deploy again without needing new code to be
+			// pushed
+			name := headName("live.git", "master")
+			ioutil.WriteFile(name, []byte(originalCommit+"\n"), 0600)
+			fallthrough
+
+		case err != nil:
+
 			// we return nil because we have already sent the error across
 			// in the nanobox.Deploy function
 			return 1, nil
@@ -59,9 +74,11 @@ func (pull Pull) Match(command string) bool {
 func (pull Pull) Run(command string, ch ssh.Channel) (uint64, error) {
 	return git.Shell(ch, ch.Stderr(), command)
 }
-
-func getCommit(name string) string {
-	file := config.Config["gitRepo"] + "/refs/heads/" + name
+func headName(repo, name string) string {
+	return config.Config["gitRepo"] + "/" + repo + "/refs/heads/" + name
+}
+func getCommit(repo, name string) string {
+	file := headName(repo, name)
 	bytes, err := ioutil.ReadFile(file)
 	if err != nil {
 		return ""

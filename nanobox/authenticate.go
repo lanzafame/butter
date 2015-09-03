@@ -14,9 +14,7 @@
 package nanobox
 
 import (
-	"github.com/pagodabox/na-ssh/templates"
 	"golang.org/x/crypto/ssh"
-	"io"
 )
 
 func Authenticate(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
@@ -26,10 +24,4 @@ func Authenticate(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, e
 	// store off what we need here
 	// return &ssh.Permissions{Extensions: map[string]string{"user_id": user.Id}}, nil
 	return nil, nil
-}
-
-func Deploy(stream io.Writer, deploy string) error {
-	stream.Write(templates.Header)
-	stream.Write(templates.Footer)
-	return nil
 }

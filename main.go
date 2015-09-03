@@ -36,6 +36,7 @@ func init() {
 		"listenAddress": ":2222",
 		"keyPath":       "./host_key",
 		"gitRepo":       "./testing",
+		"mistAddress":   "127.0.0.1:1445",
 	}
 
 	nanoboxConfig.Load(defaults, "")
