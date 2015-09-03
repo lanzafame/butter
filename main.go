@@ -14,15 +14,16 @@
 package main
 
 import (
-	"encoding/binary"
-	"fmt"
+	"github.com/pagodabox/na-ssh/commands"
+	"github.com/pagodabox/na-ssh/git"
+	"github.com/pagodabox/na-ssh/handler"
+	"github.com/pagodabox/na-ssh/nanobox"
+	"github.com/pagodabox/na-ssh/server"
 	nanoboxConfig "github.com/pagodabox/nanobox-config"
 	"golang.org/x/crypto/ssh"
-	"io"
 	"io/ioutil"
-	"net"
-	"os/exec"
-	"strings"
+	"os"
+	"os/signal"
 )
 
 var (
@@ -34,6 +35,7 @@ func init() {
 	defaults := map[string]string{
 		"listenAddress": ":2222",
 		"keyPath":       "./host_key",
+		"gitRepo":       "./testing",
 	}
 
 	nanoboxConfig.Load(defaults, "")
@@ -50,150 +52,35 @@ func init() {
 	}
 
 	sshServer = &ssh.ServerConfig{
-		PublicKeyCallback: keyAuth,
+		PublicKeyCallback: nanobox.Authenticate,
 	}
 
 	sshServer.AddHostKey(hostPrivateKeySigner)
-}
 
-func main() {
-	socket, err := net.Listen("tcp", config["listenAddress"])
-	if err != nil {
-		panic(err)
-	}
-
-	for {
-		conn, err := socket.Accept()
+	// check if the git repo is already set up
+	os.Mkdir(config["gitRepo"], 0700)
+	for _, name := range []string{"live.git", "staging.git"} {
+		err = git.Init(config["gitRepo"] + "/" + name)
 		if err != nil {
 			panic(err)
 		}
-		go handleConnection(conn)
 	}
+
+	// add in our custom commands that the ssh server can respond to
+	handler.Commands = append(handler.Commands, commands.Push{})
+	handler.Commands = append(handler.Commands, commands.Pull{})
 }
 
-func handleConnection(conn net.Conn) {
-	// upgrade to ssh connection
-	fmt.Println("new connection")
-
-	sshConn, chans, reqs, err := ssh.NewServerConn(conn, sshServer)
+func main() {
+	server, err := server.StartServer(config["listenAddress"], sshServer)
 	if err != nil {
-		fmt.Println("got an error", err)
-		return
+		panic(err)
 	}
-	fmt.Println("connection was established")
+	defer server.Close()
 
-	defer sshConn.Close()
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, os.Kill)
 
-	go func() {
-		for req := range reqs {
-			fmt.Printf("got an out-of-band request '%v'\n", req.Type)
-			// got an out-of-band request
-			// we ignore these? or what?
-		}
-	}()
-	for chanRequest := range chans {
-		handleChannel(chanRequest)
-	}
-}
-
-func handleChannel(chanRequest ssh.NewChannel) {
-	switch chanRequest.ChannelType() {
-	case "direct-tcpip":
-		// this is for port forwarding
-		chanRequest.Reject(ssh.UnknownChannelType, "Not Yet Implemented")
-	case "session":
-		ch, reqs, err := chanRequest.Accept()
-		if err != nil {
-			fmt.Println("fail to accept channel request", err)
-			return
-		}
-		for req := range reqs {
-			handleChannelRequest(ch, req)
-		}
-	default:
-		chanRequest.Reject(ssh.UnknownChannelType, fmt.Sprintf("unknown channel type: %s", chanRequest.ChannelType()))
-	}
-}
-
-func handleChannelRequest(ch ssh.Channel, req *ssh.Request) {
-	switch req.Type {
-	case "pty-req":
-		fallthrough
-	case "shell":
-		ch.Write([]byte("shell access is not allowed\r\n"))
-		ch.Close()
-	case "env":
-		// do we store these off?
-	case "exec":
-
-		// it is prefixed with the length so we strip it off
-		command := string(req.Payload[4:])
-
-		switch {
-		case strings.HasPrefix(command, "git-receive-pack "):
-			fallthrough
-		case strings.HasPrefix(command, "git-upload-pack "):
-			fmt.Printf("got command '%v'\n", command)
-			cmd := exec.Command("git", "shell", "-c", command)
-
-			outPipe, err := cmd.StdoutPipe()
-			if err != nil {
-				fmt.Println("got an error", err)
-				return
-			}
-			errPipe, err := cmd.StderrPipe()
-			if err != nil {
-				fmt.Println("got an error", err)
-				return
-			}
-			inPipe, err := cmd.StdinPipe()
-			if err != nil {
-				fmt.Println("got an error", err)
-				return
-			}
-			if err := cmd.Start(); err != nil {
-				fmt.Println("got an error", err)
-			}
-
-			go io.Copy(ch, outPipe)
-			go io.Copy(ch, errPipe)
-			go io.Copy(inPipe, ch)
-
-			err = cmd.Wait()
-			exitStatusBuffer := make([]byte, 4)
-			binary.PutUvarint(exitStatusBuffer, 0)
-
-			if err != nil {
-				fmt.Println("got an error", err)
-				// should return the exit code
-				binary.PutUvarint(exitStatusBuffer, 1)
-			}
-
-			fmt.Println("forwarding exit code")
-			_, err = ch.SendRequest("exit-status", false, exitStatusBuffer)
-			if err != nil {
-				fmt.Println("unable to send exit code", err)
-			}
-			ch.Close()
-		case strings.HasPrefix(command, "tunnel"):
-			ch.Write([]byte("establishing tunnel! (NOT YET IMPLEMENTED)\r\n"))
-			ch.Close()
-		default:
-			ch.Write([]byte(fmt.Sprintf("unsupported command: '%v'\r\n", []byte(command))))
-			ch.Close()
-		}
-
-	default:
-		ch.Write([]byte(fmt.Sprintf("request type '%v' is not implemented\r\npayload: %v\r\n", req.Type, string(req.Payload))))
-		// ch.Close()
-	}
-}
-
-func keyAuth(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
-
-	// TODO: We connect to nanobox and authenticate the user for the app
-
-	// store off what we need here
-	// return &ssh.Permissions{Extensions: map[string]string{"user_id": user.Id}}, nil
-	return nil, nil
+	// wait for a signal to arrive
+	<-c
 }
