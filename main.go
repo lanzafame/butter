@@ -14,11 +14,11 @@
 package main
 
 import (
-	"github.com/pagodabox/na-ssh/commands"
-	"github.com/pagodabox/na-ssh/git"
-	"github.com/pagodabox/na-ssh/handler"
-	"github.com/pagodabox/na-ssh/nanobox"
-	"github.com/pagodabox/na-ssh/server"
+	"bitbucket.org/nanobox/na-ssh/commands"
+	"bitbucket.org/nanobox/na-ssh/git"
+	"bitbucket.org/nanobox/na-ssh/handler"
+	"bitbucket.org/nanobox/na-ssh/nanobox"
+	"bitbucket.org/nanobox/na-ssh/server"
 	nanoboxConfig "github.com/pagodabox/nanobox-config"
 	"golang.org/x/crypto/ssh"
 	"io/ioutil"

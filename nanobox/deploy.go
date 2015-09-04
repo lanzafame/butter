@@ -14,9 +14,9 @@
 package nanobox
 
 import (
+	"bitbucket.org/nanobox/na-ssh/templates"
 	"fmt"
 	"github.com/pagodabox/golang-mist"
-	"github.com/pagodabox/na-ssh/templates"
 	"github.com/pagodabox/nanobox-config"
 	"io"
 	"net/http"

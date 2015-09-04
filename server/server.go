@@ -14,8 +14,8 @@
 package server
 
 import (
+	"bitbucket.org/nanobox/na-ssh/handler"
 	"fmt"
-	"github.com/pagodabox/na-ssh/handler"
 	"golang.org/x/crypto/ssh"
 	"io"
 	"net"

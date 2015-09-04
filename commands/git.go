@@ -14,9 +14,9 @@
 package commands
 
 import (
-	"github.com/pagodabox/na-ssh/git"
-	"github.com/pagodabox/na-ssh/nanobox"
-	"github.com/pagodabox/na-ssh/templates"
+	"bitbucket.org/nanobox/na-ssh/git"
+	"bitbucket.org/nanobox/na-ssh/nanobox"
+	"bitbucket.org/nanobox/na-ssh/templates"
 	"github.com/pagodabox/nanobox-config"
 	"golang.org/x/crypto/ssh"
 	"io/ioutil"
