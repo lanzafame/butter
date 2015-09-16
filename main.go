@@ -14,16 +14,17 @@
 package main
 
 import (
+	"bitbucket.org/nanobox/na-api"
 	"bitbucket.org/nanobox/na-ssh/commands"
 	"bitbucket.org/nanobox/na-ssh/git"
 	"bitbucket.org/nanobox/na-ssh/handler"
 	"bitbucket.org/nanobox/na-ssh/nanobox"
+	"bitbucket.org/nanobox/na-ssh/routes"
 	"bitbucket.org/nanobox/na-ssh/server"
 	nanoboxConfig "github.com/pagodabox/nanobox-config"
 	"golang.org/x/crypto/ssh"
 	"io/ioutil"
 	"os"
-	"os/signal"
 )
 
 var (
@@ -33,10 +34,11 @@ var (
 
 func init() {
 	defaults := map[string]string{
-		"listenAddress": ":2222",
-		"keyPath":       "./host_key",
-		"gitRepo":       "./testing",
-		"mistAddress":   "127.0.0.1:1445",
+		"listenAddress":     ":2222",
+		"httpListenAddress": ":2222",
+		"keyPath":           "./host_key",
+		"gitRepo":           "./testing",
+		"mistAddress":       "127.0.0.1:1445",
 	}
 
 	nanoboxConfig.Load(defaults, "")
@@ -79,9 +81,7 @@ func main() {
 	}
 	defer server.Close()
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, os.Kill)
+	routes.Init()
 
-	// wait for a signal to arrive
-	<-c
+	api.Start(config["httpListenAddress"])
 }
