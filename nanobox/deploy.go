@@ -39,12 +39,15 @@ func Deploy(stream io.Writer, deploy string) error {
 
 	// TODO add in authentication
 	header := make(http.Header, 0)
-	transactionClient := mist.NewWebsocketClient("wss://smoke.nanobox.io/subscribe", header)
+	transactionClient, err := mist.NewWebsocketClient("wss://smoke.nanobox.io/subscribe", header)
+	if err != nil {
+		return err
+	}
 
 	// TODO: send deploy to nanobox
 	http.Post("https://nanobox.io/apps/me/deploy/"+deploy, "application/json", nil)
 
-	transactionClient.Subscribe([]string{"deploy", deploy_id})
+	transactionClient.Subscribe([]string{"deploy", "deploy:1235"})
 
 	go func() {
 		// subscribe to transaction updates? maybe show which transaction is running?
@@ -68,7 +71,7 @@ func Deploy(stream io.Writer, deploy string) error {
 			"Switching over routing mesh",
 		}
 		for _, log := range logs {
-			client.Publish([]string{"log", "deploy"}, log)
+			logClient.Publish([]string{"log", "deploy"}, log)
 			time.Sleep(time.Second * 1)
 		}
 		// signal that the current deploy is done
@@ -79,14 +82,14 @@ func Deploy(stream io.Writer, deploy string) error {
 outer:
 	for {
 		select {
-		case msg, ok := <-client.Messages():
+		case msg, ok := <-logClient.Messages():
 			if !ok {
 				stream.Write(templates.ApiUnavailable)
 				return templates.ApiUnavailableError
 			}
 			// write the log
 			fmt.Println(msg)
-			stream.Write([]byte(msg.Data.(string) + "\n"))
+			stream.Write([]byte(msg.Data + "\n"))
 		case <-done:
 			break outer
 		case <-disconnected:
