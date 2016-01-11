@@ -1,28 +1,36 @@
-// -*- mode: go; tab-width: 2; indent-tabs-mode: 1; st-rulers: [70] -*-
-// vim: ts=4 sw=4 ft=lua noet
-//--------------------------------------------------------------------
-// @author Daniel Barney <daniel@nanobox.io>
-// Copyright (C) Pagoda Box, Inc - All Rights Reserved
-// Unauthorized copying of this file, via any medium is strictly
-// prohibited. Proprietary and confidential
-//
-// @doc
-//
-// @end
-// Created :   1 September 2015 by Daniel Barney <daniel@nanobox.io>
-//--------------------------------------------------------------------
 package server
 
 import (
-	"bitbucket.org/nanobox/na-ssh/handler"
 	"fmt"
+	"github.com/nanopack/butter/config"
+	"github.com/nanopack/butter/auth"
 	"golang.org/x/crypto/ssh"
 	"io"
+	"io/ioutil"
 	"net"
 )
 
-func StartServer(address string, sshServer *ssh.ServerConfig) (io.Closer, error) {
-	serverSocket, err := net.Listen("tcp", address)
+var sshServer *ssh.ServerConfig
+
+func StartServer() (io.Closer, error) {
+	hostPrivateKey, err := ioutil.ReadFile(config.KeyPath)
+	if err != nil {
+		panic(err)
+	}
+
+	hostPrivateKeySigner, err := ssh.ParsePrivateKey(hostPrivateKey)
+	if err != nil {
+		panic(err)
+	}
+
+	sshServer = &ssh.ServerConfig{
+		PasswordCallback: auth.PassAuth(),
+		PublicKeyCallback: auth.KeyAuth(),
+	}
+
+	sshServer.AddHostKey(hostPrivateKeySigner)
+
+	serverSocket, err := net.Listen("tcp", config.SshListenAddress)
 	if err != nil {
 		return nil, err
 	}
@@ -33,13 +41,13 @@ func StartServer(address string, sshServer *ssh.ServerConfig) (io.Closer, error)
 			if err != nil {
 				return
 			}
-			go handleConnection(conn, sshServer)
+			go handleConnection(conn)
 		}
 	}()
 	return serverSocket, nil
 }
 
-func handleConnection(conn net.Conn, sshServer *ssh.ServerConfig) {
+func handleConnection(conn net.Conn) {
 
 	sshConn, chans, reqs, err := ssh.NewServerConn(conn, sshServer)
 	if err != nil {
@@ -63,7 +71,7 @@ func handleConnection(conn net.Conn, sshServer *ssh.ServerConfig) {
 }
 
 func handleChannel(chanRequest ssh.NewChannel) {
-	handle, err := handler.NewHandle(chanRequest.ChannelType())
+	handle, err := NewHandle(chanRequest.ChannelType())
 	if err != nil {
 		fmt.Println("wrong handler", err)
 		chanRequest.Reject(ssh.UnknownChannelType, err.Error())

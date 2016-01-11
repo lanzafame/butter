@@ -1,87 +1,52 @@
-// -*- mode: go; tab-width: 2; indent-tabs-mode: 1; st-rulers: [70] -*-
-// vim: ts=4 sw=4 ft=lua noet
-//--------------------------------------------------------------------
-// @author Daniel Barney <daniel@nanobox.io>
-// Copyright (C) Pagoda Box, Inc - All Rights Reserved
-// Unauthorized copying of this file, via any medium is strictly
-// prohibited. Proprietary and confidential
-//
-// @doc
-//
-// @end
-// Created :   1 September 2015 by Daniel Barney <daniel@nanobox.io>
-//--------------------------------------------------------------------
 package main
 
 import (
-	"bitbucket.org/nanobox/na-api"
-	"bitbucket.org/nanobox/na-ssh/commands"
-	"bitbucket.org/nanobox/na-ssh/git"
-	"bitbucket.org/nanobox/na-ssh/handler"
-	"bitbucket.org/nanobox/na-ssh/nanobox"
-	"bitbucket.org/nanobox/na-ssh/routes"
-	"bitbucket.org/nanobox/na-ssh/server"
-	nanoboxConfig "github.com/pagodabox/nanobox-config"
-	"golang.org/x/crypto/ssh"
-	"io/ioutil"
-	"os"
+	"github.com/nanopack/butter/api"
+	"github.com/nanopack/butter/config"
+	"github.com/nanopack/butter/server"
+
+	"github.com/spf13/cobra"
 )
-
-var (
-	config    map[string]string
-	sshServer *ssh.ServerConfig
-)
-
-func init() {
-	defaults := map[string]string{
-		"listenAddress":     ":2222",
-		"httpListenAddress": ":2222",
-		"keyPath":           "./host_key",
-		"gitRepo":           "./testing",
-		"mistAddress":       "127.0.0.1:1445",
-	}
-
-	nanoboxConfig.Load(defaults, "")
-	config = nanoboxConfig.Config
-
-	hostPrivateKey, err := ioutil.ReadFile(config["keyPath"])
-	if err != nil {
-		panic(err)
-	}
-
-	hostPrivateKeySigner, err := ssh.ParsePrivateKey(hostPrivateKey)
-	if err != nil {
-		panic(err)
-	}
-
-	sshServer = &ssh.ServerConfig{
-		PublicKeyCallback: nanobox.Authenticate,
-	}
-
-	sshServer.AddHostKey(hostPrivateKeySigner)
-
-	// check if the git repo is already set up
-	os.Mkdir(config["gitRepo"], 0700)
-	for _, name := range []string{"live.git", "staging.git"} {
-		err = git.Init(config["gitRepo"] + "/" + name)
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	// add in our custom commands that the ssh server can respond to
-	handler.Commands = append(handler.Commands, commands.Push{})
-	handler.Commands = append(handler.Commands, commands.Pull{})
-}
 
 func main() {
-	server, err := server.StartServer(config["listenAddress"], sshServer)
+	server := true
+	configFile := ""
+	command := cobra.Command{
+		Use:   "butter",
+		Short: "butter makes the breads silky smooth",
+		Long:  `Butter is a solid dairy product made by churning fresh or fermented cream or milk, to separate the butterfat from the buttermilk. It is generally used as a spread on plain or toasted bread products and a condiment on cooked vegetables, as well as in cooking, such as baking, sauce making, and pan frying. Butter consists of butterfat, milk proteins and water.`,
+		Run: func(ccmd *cobra.Command, args []string) {
+			if !server {
+				ccmd.HelpFunc()(ccmd, args)
+				return
+			}
+			if configFile != "" {
+				config.Parse(configFile)
+			}
+			serverStart()
+		},
+	}
+	config.AddFlags(&command)
+
+	command.Flags().BoolVarP(&server, "server", "s", false, "Run as server")
+	command.Flags().StringVarP(&configFile, "configFile", "", "","[server] config file location")
+
+	// when we create a cli i will add it here
+	// cli.AddCli(command)
+
+	command.Execute()
+
+}
+
+func serverStart() {
+	sshServer, err := server.StartServer()
 	if err != nil {
 		panic(err)
 	}
-	defer server.Close()
+	defer sshServer.Close()
 
-	routes.Init()
-
-	api.Start(config["httpListenAddress"])
+	err = api.Start()
+	if err != nil {
+		panic(err)
+	}
 }
