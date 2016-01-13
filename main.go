@@ -2,7 +2,10 @@ package main
 
 import (
 	"github.com/nanopack/butter/api"
+	"github.com/nanopack/butter/auth"
 	"github.com/nanopack/butter/config"
+	"github.com/nanopack/butter/deploy"
+	"github.com/nanopack/butter/repo"
 	"github.com/nanopack/butter/server"
 
 	"github.com/spf13/cobra"
@@ -29,7 +32,7 @@ func main() {
 	config.AddFlags(&command)
 
 	command.Flags().BoolVarP(&server, "server", "s", false, "Run as server")
-	command.Flags().StringVarP(&configFile, "configFile", "", "","[server] config file location")
+	command.Flags().StringVarP(&configFile, "configFile", "", "", "[server] config file location")
 
 	// when we create a cli i will add it here
 	// cli.AddCli(command)
@@ -39,6 +42,18 @@ func main() {
 }
 
 func serverStart() {
+	err := deploy.Setup()
+	if err != nil {
+		panic(err)
+	}
+	err = repo.Setup()
+	if err != nil {
+		panic(err)
+	}
+	err = auth.Setup()
+	if err != nil {
+		panic(err)
+	}
 	sshServer, err := server.StartServer()
 	if err != nil {
 		panic(err)

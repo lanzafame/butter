@@ -2,8 +2,8 @@ package server
 
 import (
 	"fmt"
-	"github.com/nanopack/butter/config"
 	"github.com/nanopack/butter/auth"
+	"github.com/nanopack/butter/config"
 	"golang.org/x/crypto/ssh"
 	"io"
 	"io/ioutil"
@@ -15,16 +15,16 @@ var sshServer *ssh.ServerConfig
 func StartServer() (io.Closer, error) {
 	hostPrivateKey, err := ioutil.ReadFile(config.KeyPath)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	hostPrivateKeySigner, err := ssh.ParsePrivateKey(hostPrivateKey)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	sshServer = &ssh.ServerConfig{
-		PasswordCallback: auth.PassAuth(),
+		PasswordCallback:  auth.PassAuth(),
 		PublicKeyCallback: auth.KeyAuth(),
 	}
 
@@ -44,6 +44,7 @@ func StartServer() (io.Closer, error) {
 			go handleConnection(conn)
 		}
 	}()
+	config.Log.Info("SSH listening on %s", config.SshListenAddress)
 	return serverSocket, nil
 }
 
@@ -51,10 +52,10 @@ func handleConnection(conn net.Conn) {
 
 	sshConn, chans, reqs, err := ssh.NewServerConn(conn, sshServer)
 	if err != nil {
-		fmt.Println("got an error", err)
+		config.Log.Debug("got an error", err)
 		return
 	}
-	fmt.Println("connection was established")
+	config.Log.Debug("connection was established")
 
 	defer sshConn.Close()
 
@@ -73,14 +74,14 @@ func handleConnection(conn net.Conn) {
 func handleChannel(chanRequest ssh.NewChannel) {
 	handle, err := NewHandle(chanRequest.ChannelType())
 	if err != nil {
-		fmt.Println("wrong handler", err)
+		config.Log.Debug("wrong handler %v", err)
 		chanRequest.Reject(ssh.UnknownChannelType, err.Error())
 		return
 	}
 
 	ch, reqs, err := chanRequest.Accept()
 	if err != nil {
-		fmt.Println("fail to accept channel request", err)
+		config.Log.Debug("fail to accept channel request %v", err)
 		return
 	}
 
@@ -89,9 +90,11 @@ func handleChannel(chanRequest ssh.NewChannel) {
 	for req := range reqs {
 		done, err := handle.Request(ch, req)
 		if err != nil {
-			fmt.Println("request errored out", err)
+			config.Log.Debug("request errored out %v", err)
 			_, err := ch.Write([]byte(fmt.Sprintf("%v\r\n", err)))
-			fmt.Println(err)
+			if err != nil {
+				config.Log.Debug(err.Error())
+			}
 		}
 		if done {
 			return

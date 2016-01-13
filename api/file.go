@@ -1,14 +1,17 @@
 package api
 
 import (
-	"net/http"
+	"fmt"
 	"io"
-	
+	"net/http"
+
 	"github.com/nanopack/butter/repo"
 )
 
 func listFiles(rw http.ResponseWriter, req *http.Request) {
-	files, err := repo.ListFiles(req.FormValue("commit"))
+	comm := req.FormValue("commit")
+	fmt.Println("commmmm",comm)
+	files, err := repo.ListFiles(comm)
 	if err != nil {
 		rw.Write([]byte(err.Error()))
 		rw.WriteHeader(http.StatusInternalServerError)

@@ -1,8 +1,8 @@
 package auth
 
 import (
-	"golang.org/x/crypto/ssh"
 	"github.com/nanopack/butter/config"
+	"golang.org/x/crypto/ssh"
 )
 
 type (
@@ -15,17 +15,15 @@ type (
 		Initialize() error
 		Auth(conn ssh.ConnMetadata, password []byte) (*ssh.Permissions, error)
 	}
-
 )
 
-var	(
+var (
 	availableKeyAuthers = map[string]KeyAuther{}
-	defaultKeyAuther KeyAuther
+	defaultKeyAuther    KeyAuther
 
 	availablePassAuthers = map[string]PassAuther{}
-	defaultPassAuther PassAuther
+	defaultPassAuther    PassAuther
 )
-
 
 func KeyRegister(name string, k KeyAuther) {
 	availableKeyAuthers[name] = k
@@ -38,6 +36,7 @@ func PassRegister(name string, p PassAuther) {
 func Setup() error {
 	keyauth, ok := availableKeyAuthers[config.KeyAuthType]
 	if ok {
+		config.Log.Info("setting up key auth(%s) location: %s", config.KeyAuthType, config.KeyAuthLocation)
 		defaultKeyAuther = keyauth
 		if err := keyauth.Initialize(); err != nil {
 			return err
@@ -45,6 +44,7 @@ func Setup() error {
 	}
 	passauth, ok := availablePassAuthers[config.PassAuthType]
 	if ok {
+		config.Log.Info("setting up pass auth(%s) location: %s", config.PassAuthType, config.PassAuthLocation)
 		defaultPassAuther = passauth
 		if err := passauth.Initialize(); err != nil {
 			return err
@@ -53,14 +53,14 @@ func Setup() error {
 	return nil
 }
 
-func KeyAuth() (func(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error)) {
+func KeyAuth() func(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
 	if defaultKeyAuther == nil {
 		return nil
 	}
 	return defaultKeyAuther.Auth
 }
 
-func PassAuth() (func(conn ssh.ConnMetadata, password []byte) (*ssh.Permissions, error)) {
+func PassAuth() func(conn ssh.ConnMetadata, password []byte) (*ssh.Permissions, error) {
 	if defaultPassAuther == nil {
 		return nil
 	}

@@ -2,8 +2,8 @@ package repo
 
 import (
 	"fmt"
-	"time"
 	"io"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 
@@ -12,18 +12,18 @@ import (
 
 type (
 	File struct {
-		Name string
-		Size int64
-		IsDir bool
+		Name    string
+		Size    int64
+		IsDir   bool
 		ModTime time.Time
 	}
 
 	Commit struct {
-		ID string
-		Message string
-		AuthorName string
+		ID          string
+		Message     string
+		AuthorName  string
 		AuthorEmail string
-		Timestamp time.Time
+		Timestamp   time.Time
 	}
 
 	Command interface {
@@ -46,8 +46,7 @@ type (
 
 var (
 	availableManagers = map[string]Manager{}
-	defaultManager Manager
-
+	defaultManager    Manager
 )
 
 func Register(name string, m Manager) {
@@ -59,6 +58,7 @@ func Setup() error {
 	if !ok {
 		return fmt.Errorf("no repo manager found for %s", config.RepoType)
 	}
+	config.Log.Info("setting up repo(%s) at %s", config.RepoType, config.RepoLocation)
 	defaultManager = manager
 	return manager.Initialize()
 	// setup the default client and call initialize on it once its setup

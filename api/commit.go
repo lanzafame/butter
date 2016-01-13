@@ -9,7 +9,11 @@ import (
 
 func showCommits(rw http.ResponseWriter, req *http.Request) {
 	page, _ := strconv.Atoi(req.FormValue("page"))
-	commits, err := repo.ListCommits(req.FormValue("page"), page)
+	branch := req.FormValue("branch")
+	if branch == "" {
+		branch = "master"
+	}
+	commits, err := repo.ListCommits(branch, page)
 	if err != nil {
 		rw.Write([]byte(err.Error()))
 		rw.WriteHeader(http.StatusInternalServerError)

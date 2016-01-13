@@ -3,7 +3,7 @@
 
 ## Butter
 
-A small, git-based deployment service with pluggable authentication and deployment strategies.
+A small, version controll based deployment service with pluggable authentication and deployment strategies.
 
 ### Status
 Experimental/Unstable/Incomplete
@@ -19,3 +19,8 @@ Experimental/Unstable/Incomplete
 | `/commits/{commit}` | Get details about a specific commit | nil | `[{"id":"sha","author":"me","message":"this is a message","author_date":"jan","author_email":"me@me.com"}]` |
 
 [![butter logo](http://nano-assets.gopagoda.io/open-src/nanobox-open-src.png)](http://nanobox.io/open-source)
+
+
+## TODO
+build a cli
+Write tests

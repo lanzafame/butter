@@ -3,26 +3,30 @@ package config
 import (
 	"io/ioutil"
 
-	"github.com/spf13/cobra"
 	"github.com/ghodss/yaml"
 	"github.com/jcelliott/lumber"
+	"github.com/spf13/cobra"
 )
 
 var (
 	SshListenAddress  string
 	HttpListenAddress string
 	KeyPath           string
-	RepoType					string
+	RepoType          string
 	RepoLocation      string
-	KeyAuthType				string
+	KeyAuthType       string
 	KeyAuthLocation   string
-	PassAuthType			string
+	PassAuthType      string
 	PassAuthLocation  string
-	DeployType				string
-	DeployLocation	  string
+	DeployType        string
+	DeployLocation    string
 	Token             string
-	Log            	  lumber.Logger
+	Log               lumber.Logger
 )
+
+func init() {
+	Log = lumber.NewConsoleLogger(lumber.DEBUG)
+}
 
 func AddFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&SshListenAddress, "ssh-address", "", ":2222", "[server] SshListenAddress")
@@ -34,9 +38,9 @@ func AddFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&KeyAuthLocation, "key-auth-location", "", "", "[server] KeyAuthLocation")
 	cmd.Flags().StringVarP(&PassAuthType, "pass-auth-type", "", "", "[server] PassAuthType")
 	cmd.Flags().StringVarP(&PassAuthLocation, "pass-auth-location", "", "", "[server] PassAuthLocation")
-	cmd.Flags().StringVarP(&DeployType, "pass-auth-type", "", "", "[server] DeployType")
-	cmd.Flags().StringVarP(&DeployLocation, "pass-auth-location", "", "", "[server] DeployLocation")
-	cmd.PersistentFlags().StringVarP(&Token, "token", "", "secret"	, "Token security")
+	cmd.Flags().StringVarP(&DeployType, "deploy-type", "", "", "[server] DeployType")
+	cmd.Flags().StringVarP(&DeployLocation, "deploy-location", "", "", "[server] DeployLocation")
+	cmd.PersistentFlags().StringVarP(&Token, "token", "", "secret", "Token security")
 }
 
 func Parse(configFile string) {
@@ -44,7 +48,6 @@ func Parse(configFile string) {
 
 	bytes, err := ioutil.ReadFile(configFile)
 	if err != nil {
-		Log = lumber.NewConsoleLogger(lumber.INFO)
 		Log.Error("unable to read config file: %v\n", err)
 	}
 	err = yaml.Unmarshal(bytes, &c)

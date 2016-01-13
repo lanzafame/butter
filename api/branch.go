@@ -1,8 +1,8 @@
 package api
 
 import (
-	"net/http"
 	"github.com/nanopack/butter/repo"
+	"net/http"
 )
 
 func showBranches(rw http.ResponseWriter, req *http.Request) {
@@ -17,5 +17,5 @@ func showBranches(rw http.ResponseWriter, req *http.Request) {
 
 // there arent branch details yet... as far as i know
 func showBranchDetails(rw http.ResponseWriter, req *http.Request) {
-	writeBody(nil, rw, http.StatusOK)
+	rw.Write([]byte(req.URL.Query().Get(":branch")))
 }

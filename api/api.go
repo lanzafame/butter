@@ -2,25 +2,49 @@ package api
 
 import (
 	"net/http"
-	
+
+	"encoding/json"
 	"github.com/gorilla/pat"
 	"github.com/nanobox-io/nanoauth"
 	"github.com/nanopack/butter/config"
-	"encoding/json"
 )
 
 func Start() error {
 	router := pat.New()
 
-	router.Get("/branches", showBranches)
-	router.Get("/branches/{branch}", showBranchDetails)
-	router.Get("/commits", showCommits)
-	router.Get("/commits/{commit}", showCommitDetails)
-	router.Get("/files", listFiles)
-	router.Get("/files/{file}", getFileContents)
+	router.Get("/branches/{branch}", handleRequest(showBranchDetails))
+	router.Get("/branches", handleRequest(showBranches))
+	router.Get("/commits/{commit}", handleRequest(showCommitDetails))
+	router.Get("/commits", handleRequest(showCommits))
+	router.Get("/files/{file:.*}", handleRequest(getFileContents))
+	router.Get("/files", handleRequest(listFiles))
 
 	// blocking...
+	config.Log.Info("Api Listening on %s", config.HttpListenAddress)
 	return nanoauth.ListenAndServeTLS(config.HttpListenAddress, config.Token, router)
+}
+
+// handleRequest
+func handleRequest(fn func(http.ResponseWriter, *http.Request)) http.HandlerFunc {
+	return func(rw http.ResponseWriter, req *http.Request) {
+
+		config.Log.Debug(`
+Request:
+--------------------------------------------------------------------------------
+%+v
+
+`, req)
+
+		//
+		fn(rw, req)
+
+		config.Log.Debug(`
+Response:
+--------------------------------------------------------------------------------
+%+v
+
+`, rw)
+	}
 }
 
 // writeBody

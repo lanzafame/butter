@@ -2,34 +2,40 @@ package repo
 
 import (
 	"fmt"
-	"io/ioutil"
-	"strings"
-	"os/exec" 
-	"os"
 	"io"
+	"io/ioutil"
+	"os"
+	"os/exec"
+	"strings"
 
 	"golang.org/x/crypto/ssh"
 
-	"github.com/gogits/git"
+	"github.com/shazow/go-git"
 
 	"github.com/nanopack/butter/config"
+	"github.com/nanopack/butter/deploy"
 )
 
 type (
-	gitRepo struct {} // Manager interface
-	Push struct{} // Command interface
-	Pull struct{} // Command interface
+	gitRepo struct{} // Manager interface
+	Push    struct{} // Command interface
+	Pull    struct{} // Command interface
 )
 
 func init() {
 	Register("git", gitRepo{})
 }
 
+func (g gitRepo) repo() (*git.Repository, error) {
+	return git.OpenRepository(config.RepoLocation + "/live.git")
+}
+
 func (g gitRepo) Initialize() error {
-	os.Mkdir(config.RepoLocation, 0777)
-	if _, err := os.Stat(config.RepoLocation + "/info"); os.IsNotExist(err) {
+	live := config.RepoLocation + "/live.git"
+	os.MkdirAll(live, 0777)
+	if _, err := os.Stat(live + "/info"); os.IsNotExist(err) {
 		cmd := exec.Command("git", "init", "--bare")
-		cmd.Dir = config.RepoLocation
+		cmd.Dir = live
 		return cmd.Run()
 	}
 	return nil
@@ -40,7 +46,7 @@ func (g gitRepo) Commands() []Command {
 }
 
 func (g gitRepo) ListBranches() ([]string, error) {
-	repo, err := git.OpenRepository(config.RepoLocation)
+	repo, err := g.repo()
 	if err != nil {
 		return nil, err
 	}
@@ -52,39 +58,53 @@ func (g gitRepo) GetBranch(id string) (string, error) {
 }
 
 func (g gitRepo) ListCommits(branch string, page int) ([]Commit, error) {
-	repo, err := git.OpenRepository(config.RepoLocation)
+	repo, err := g.repo()
 	if err != nil {
+		config.Log.Debug("getting repo")
 		return nil, err
 	}
 	commit, err := repo.GetCommitOfBranch(branch)
 	if err != nil {
+		config.Log.Debug("getting commit")
 		return nil, err
 	}
-	list, err := commit.CommitsByRange(page)
+	list, err := repo.CommitsBefore(commit.Id.String())
 	if err != nil {
+		config.Log.Debug("getting commits")
 		return nil, err
 	}
 	commits := []Commit{}
-	for elem := list.Front(); elem != nil; elem = elem.Next() {
-		c, ok := elem.Value.(*git.Commit)
-		if !ok {
-			return nil, fmt.Errorf("the element value is of type %#v", elem.Value)
-		}
-		com := Commit{
-			ID: c.Id.String(), 
-			Message: c.CommitMessage,
-			AuthorName: c.Author.Name,
-			AuthorEmail: c.Author.Email,
-			Timestamp: c.Author.When,
-		}
-		commits = append(commits, com)
+	elem := list.Front()
+	paging := true
+	if page <= 0 {
+		paging = false
 	}
+	page = page - 1
+	for i := 0; i < list.Len() && elem != nil; i++ {
+		if !paging || i / 100 == page {
+			c, ok := elem.Value.(*git.Commit)
+			if !ok {
+				return nil, fmt.Errorf("the element value is of type %#v", elem.Value)
+			}
+			com := Commit{
+				ID:          c.Id.String(),
+				Message:     c.CommitMessage,
+				AuthorName:  c.Author.Name,
+				AuthorEmail: c.Author.Email,
+				Timestamp:   c.Author.When,
+			}
+			commits = append(commits, com)
 
-	return nil, nil
+		}
+		elem = elem.Next()	
+	}
+	for ; elem != nil;  {
+	}
+	return commits, nil
 }
 
 func (g gitRepo) GetCommit(id string) (Commit, error) {
-	repo, err := git.OpenRepository(config.RepoLocation)
+	repo, err := g.repo()
 	if err != nil {
 		return Commit{}, err
 	}
@@ -93,44 +113,78 @@ func (g gitRepo) GetCommit(id string) (Commit, error) {
 		return Commit{}, err
 	}
 	com := Commit{
-			ID: c.Id.String(), 
-			Message: c.CommitMessage,
-			AuthorName: c.Author.Name,
-			AuthorEmail: c.Author.Email,
-			Timestamp: c.Author.When,
-		}
-	return com, nil	
+		ID:          c.Id.String(),
+		Message:     c.CommitMessage,
+		AuthorName:  c.Author.Name,
+		AuthorEmail: c.Author.Email,
+		Timestamp:   c.Author.When,
+	}
+	return com, nil
 }
 
 func (g gitRepo) ListFiles(commit string) ([]File, error) {
-	repo, err := git.OpenRepository(config.RepoLocation)
+	repo, err := g.repo()
 	if err != nil {
 		return nil, err
 	}
-	tree, err := repo.GetTree(commit) 
+	fmt.Println("repo", repo)
+	c, err := repo.GetCommit(commit)
 	if err != nil {
 		return nil, err
 	}
+
+	tree, err := repo.GetTree(c.TreeId().String())
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("tree", tree)
 	files := []File{}
-	for _, entry := range tree.ListEntries() {
+	walker := func(path string, te *git.TreeEntry, err error) error {
+		if err != nil {
+			return err
+		}
 		file := File{
-			Name: entry.Name(),
-			Size: entry.Size(),
-			IsDir: entry.IsDir(),
-			ModTime: entry.ModTime(),
+			Name:    path,
+			Size:    te.Size(),
+			IsDir:   te.IsDir(),
+			ModTime: te.ModTime(),
 		}
 		files = append(files, file)
+		return nil
 	}
+	tree.Walk(walker)
+
+	// scanner, err := tree.Scanner()
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// files := []File{}
+	// for scanner.Scan() {
+	// 	fmt.Println(scanner.TreeEntry())
+	// 	file := File{
+	// 		Name:    scanner.TreeEntry().Name(),
+	// 		Size:    scanner.TreeEntry().Size(),
+	// 		IsDir:   scanner.TreeEntry().IsDir(),
+	// 		ModTime: scanner.TreeEntry().ModTime(),
+	// 	}
+	// 	files = append(files, file)
+	// }	
 
 	return files, nil
 }
 
 func (g gitRepo) GetFile(commit, path string) (File, error) {
-	repo, err := git.OpenRepository(config.RepoLocation)
+	repo, err := g.repo()
 	if err != nil {
 		return File{}, err
 	}
-	tree, err := repo.GetTree(commit) 
+	c, err := repo.GetCommit(commit)
+	if err != nil {
+		return File{}, err
+	}
+
+	tree, err := repo.GetTree(c.TreeId().String())
 	if err != nil {
 		return File{}, err
 	}
@@ -139,9 +193,9 @@ func (g gitRepo) GetFile(commit, path string) (File, error) {
 		return File{}, err
 	}
 	file := File{
-		Name: entry.Name(),
-		Size: entry.Size(),
-		IsDir: entry.IsDir(),
+		Name:    entry.Name(),
+		Size:    entry.Size(),
+		IsDir:   entry.IsDir(),
 		ModTime: entry.ModTime(),
 	}
 
@@ -149,11 +203,18 @@ func (g gitRepo) GetFile(commit, path string) (File, error) {
 }
 
 func (g gitRepo) GetFileReader(commit, path string) (io.ReadCloser, error) {
-	repo, err := git.OpenRepository(config.RepoLocation)
+	fmt.Println("thisisafadsfasfsdaf",path)
+	repo, err := g.repo()
+	if err != nil {
+		fmt.Println("repo")
+		return nil, err
+	}
+	c, err := repo.GetCommit(commit)
 	if err != nil {
 		return nil, err
 	}
-	tree, err := repo.GetTree(commit) 
+
+	tree, err := repo.GetTree(c.TreeId().String())
 	if err != nil {
 		return nil, err
 	}
@@ -171,47 +232,27 @@ func (push Push) Match(command string) bool {
 
 func (push Push) Run(command string, ch ssh.Channel) (uint64, error) {
 	//TODO make "master" be dynamic
-	originalCommit := getCommit("master")
 	code, err := gitShell(ch, ch.Stderr(), command)
 	if err == nil {
 		newCommit := getCommit("master")
-		if newCommit == originalCommit {
-			// nothing happened
-			return code, nil
+		stream := ch.Stderr()
+		err = deploy.Run(stream, newCommit)
+		if err != nil {
+			return 1, err
 		}
-
-		// stream := ch.Stderr()
-		// err := nanobox.Deploy(stream, newCommit)
-
-		// switch {
-		// case err == templates.ApiUnavailableError:
-
-		// 	// write the original commit back to the master file, so that we
-		// 	// can trigger a deploy again without needing new code to be
-		// 	// pushed
-		// 	name := headName("master")
-		// 	ioutil.WriteFile(name, []byte(originalCommit+"\n"), 0600)
-		// 	fallthrough
-
-		// case err != nil:
-
-		// 	// we return nil because we have already sent the error across
-		// 	// in the nanobox.Deploy function
-		// 	return 1, nil
-		// }
 	}
 	return code, err
 }
 
 func (pull Pull) Match(command string) bool {
-	return strings.HasPrefix(command, "git-send-pack ")
+	return strings.HasPrefix(command, "git-send-pack") || strings.HasPrefix(command, "git-upload-pack")
 }
 
 func (pull Pull) Run(command string, ch ssh.Channel) (uint64, error) {
 	return gitShell(ch, ch.Stderr(), command)
 }
 func headName(name string) string {
-	return config.RepoLocation + "/refs/heads/" + name
+	return config.RepoLocation + "/live.git/refs/heads/" + name
 }
 func getCommit(name string) string {
 	file := headName(name)
@@ -222,7 +263,6 @@ func getCommit(name string) string {
 	return strings.TrimRight(string(bytes), "\n\r")
 }
 
-
 func gitShell(duplex io.ReadWriter, errStream io.Writer, command string) (uint64, error) {
 	cmd := exec.Command("git", "shell", "-c", command)
 	cmd.Dir = config.RepoLocation
@@ -230,6 +270,7 @@ func gitShell(duplex io.ReadWriter, errStream io.Writer, command string) (uint64
 	cmd.Stdout = duplex
 	cmd.Stderr = errStream
 	cmd.Stdin = duplex
+	config.Log.Debug("running command %+v", cmd)
 
 	err := cmd.Run()
 	fmt.Println(err) // logging
